@@ -21,6 +21,11 @@ import { buildDossier } from './vendor/makefun-roblox.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
+// The game this entry hands in: "SAHUR BASE — Steal a Brainrot", a 3D Steal-a-Brainrot-style game whose Rojo
+// project lives in src/ and whose place is game.rbxl.
+const GAME_TITLE = 'SAHUR BASE — Steal a Brainrot';
+console.log(`Handing in "${GAME_TITLE}" (roblox-brainrot-01) to ${out}`);
+
 /** cpSync's filter: leave out every file and directory whose name starts with a dot (.gitkeep, .DS_Store, .git). */
 const notDotted = (path: string): boolean => !basename(path).startsWith('.');
 

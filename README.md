@@ -1,21 +1,48 @@
-# roblox-brainrot-01 starter
+# SAHUR BASE — Steal a Brainrot
 
-A working entry for make.fun's "Make the best AI Roblox brainrot game" bounty (roblox-brainrot-01), laid out as your
-repository: a Rojo project whose game is a grey square that moves with the arrow keys. It is a starting point, not a
-winner, and not yet the 3D game the bounty asks for: its square is drawn on the screen, not in Roblox's 3D world.
+A 3D Steal-a-Brainrot game for Roblox, built entirely from Luau code (the world, the characters,
+the economy — every Part is placed by a script; there are no external assets). Entry for make.fun's
+**roblox-brainrot-01** bounty, "Make the best AI Roblox brainrot game".
 
-- `main.ts` (Node 22, standard library only) hands the game in: it copies `game.rbxl`, `src/`, `screenshots/` and
-  `PLAY.json` to `/output`, leaving out every name that starts with a dot (such as `.gitkeep` or `.DS_Store`, which
-  fail an entry), and writes `/output/dossier.json` with `vendor/makefun-roblox.ts`, the kit's copy, unchanged.
-- `game.rbxl` is the place Rojo builds from `src/` and `default.project.json`; `screenshots/` holds three captures of
-  it; `PLAY.json` names no place yet, so the gate refuses the starter as it stands until it names your published one.
-- One of your screenshots must also be your game's first thumbnail on Roblox: the same picture, uploaded on the
-  Creator Dashboard with your game's icon.
-- `TOUR.json` is an example of the optional tour: for each screenshot, the keys that bring the game to that screen.
+**Play it:** https://www.roblox.com/games/107649210185098
 
-Run it as the grader does, writing `out/` in place of `/output`:
+## How to play
 
-    mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+- You spawn at one of **six bases** around a plaza. Down the middle runs the **Brainrot Express**,
+  a conveyor belt carrying absurd characters past your base, each with a price tag.
+- **Buy** one (walk up, use the prompt) and it hops off the belt and walks to a pad on your base,
+  where it earns you cash every second. Rarer brainrots cost more and pay far more.
+- **Steal**: any brainrot standing on a rival's base can be grabbed. It rides on your head while
+  you run — slower than usual — and becomes yours the moment you reach your own base.
+- **Defend**: you carry a **slap hand**. Bonk a thief and their catch drops and walks home.
+  Your base's **Lock** pad seals it for 60 seconds so nobody can steal from you.
+- **Progress**: **Rebirth** trades your cash and collection for a permanent income multiplier,
+  and the base shop sells **Slap** upgrades (range and bonk power) and **Speed** upgrades.
 
-The rules are on the bounty's page (/bounty/roblox-brainrot-01) and in the kit's RULES.txt,
-which gives every command in order (Before you submit, then Enter).
+## The cast
+
+Ten original characters on a five-rarity ladder, all modelled from parts in code:
+Brr Brr Patapim and Lirili Larila (Common), Tralalero Tralala and Chimpanzini Bananini (Rare),
+Ballerina Cappuccina and Cappuccino Assassino (Epic), Tung Tung Sahur and Frigo Camelo
+(Legendary), Bombardiro Crocodilo and La Vaca Saturno Saturnita (Mythic).
+
+## Layout of the entry
+
+- `main.ts` (Node 22, standard library only) hands the game in: it copies `game.rbxl`, `src/`,
+  `screenshots/` and `PLAY.json` to `/output` (skipping any name that starts with a dot) and
+  writes `/output/dossier.json` with `vendor/makefun-roblox.ts`, the kit's copy, unchanged.
+- `game.rbxl` is the binary place Rojo builds from `src/` and `default.project.json`:
+  `rojo build default.project.json --output game.rbxl`.
+- `src/shared/` — `BrainrotData` (the cast, rarities, prices, build recipes) and `Config`
+  (every tuning number), as ModuleScripts in ReplicatedStorage.
+- `src/server/` — the `GameServer` bootstrap Script in ServerScriptService and its ModuleScripts:
+  `GameState` (all runtime state, in memory only — no DataStore), `WorldBuilder` (the plaza,
+  conveyor and bases), `CharacterFactory` (part-built characters, labels, walk animation),
+  `BaseManager` (bases, pads, the lock), `Economy` (cash, income, rebirth, upgrades),
+  `Conveyor` (spawning and buying) and `StealSystem` (stealing, carrying, the slap).
+- `src/client/` — `Hud`, a LocalScript that draws the cash/income panel, the Lock and Rebirth
+  buttons, toast notifications and the carrying banner, and fires the slap remote.
+- `PLAY.json` names the published place (place 107649210185098, universe 7987983561).
+- `TOUR.json` is the optional reviewer tour of the screenshots.
+
+State is per-server and in memory only: a fresh server is a fresh game.
