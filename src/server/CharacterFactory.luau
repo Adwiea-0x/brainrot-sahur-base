@@ -3,10 +3,11 @@
 -- it, and owns the little walk animation every system shares: conveyor strolling, the dash to a
 -- buyer's pad and the sad walk home after a drop.
 --
--- The look comes from the real thing: at server start, Prepare() loads the owner's Creator Store
--- character models with InsertService (via AssetLibrary, which strips their scripts), scales
--- each one to about five studs and re-pivots it so its feet are its pivot. If a model cannot be
--- loaded, the character falls back to the original part-built recipe in BrainrotData.
+-- The look comes from the real thing: Prepare() loads the owner's Creator Store character
+-- models with InsertService (via AssetLibrary, which strips their scripts) in the background,
+-- scales each one to about five studs and re-pivots it so its feet are its pivot. The conveyor
+-- never waits for it: characters spawn part-built and swap to the real models as templates
+-- arrive. If a model cannot be loaded, the character keeps the original part-built recipe.
 --
 -- GROUNDING: posing never assumes where a model's pivot sits. Every entry measures its own
 -- GroundOffset — the height of the model's pivot above its bounding-box bottom — at build time,
@@ -92,44 +93,64 @@ local function packModelFor(def): Model?
 	return nil
 end
 
--- Load every cast member's real model into ServerStorage before the conveyor starts.
--- Anything that fails to load (or arrives empty) keeps its part-built recipe instead.
+-- Load every cast member's real model into ServerStorage — in the BACKGROUND. Prepare()
+-- returns immediately; the conveyor starts at once with part-built characters and Build()
+-- picks up each template the moment it lands. Loading can yield (InsertService) and, in v12,
+-- could even throw (GroundPivot), so the whole body runs in a pcall'd task.spawn and every
+-- single character's load is pcall'd on its own: no character, and no load failure, can ever
+-- stall or kill the game. Anything that fails keeps its part-built recipe.
 function CharacterFactory.Prepare()
 	if prepared then
 		return
 	end
 	prepared = true
-	local folder = Instance.new("Folder")
-	folder.Name = "BrainrotTemplates"
-	folder.Parent = ServerStorage
+	task.spawn(function()
+		local ok, err = pcall(function()
+			local folder = Instance.new("Folder")
+			folder.Name = "BrainrotTemplates"
+			folder.Parent = ServerStorage
 
-	local loaded, fellBack = {}, {}
-	for _, def in ipairs(BrainrotData.Cast) do
-		local model = nil
-		local assetId = ASSET_IDS[def.Id]
-		if assetId then
-			model = AssetLibrary.LoadModel(assetId)
-		end
-		if not model then
-			model = packModelFor(def)
-		end
-		if model and AssetLibrary.NormalizeCharacter(model) then
-			model.Name = def.Id
-			model.Archivable = true
-			model.Parent = folder
-			templates[def.Id] = model
-			table.insert(loaded, def.Name)
-		else
-			if model then
-				model:Destroy()
+			local loaded, fellBack = {}, {}
+			for _, def in ipairs(BrainrotData.Cast) do
+				local charOk, model = pcall(function()
+					local m = nil
+					local assetId = ASSET_IDS[def.Id]
+					if assetId then
+						m = AssetLibrary.LoadModel(assetId)
+					end
+					if not m then
+						m = packModelFor(def)
+					end
+					if m and AssetLibrary.NormalizeCharacter(m) then
+						return m
+					end
+					if m then
+						m:Destroy()
+					end
+					return nil
+				end)
+				if charOk and model then
+					model.Name = def.Id
+					model.Archivable = true
+					model.Parent = folder
+					templates[def.Id] = model
+					table.insert(loaded, def.Name)
+				else
+					if not charOk then
+						print("[SahurBase] Character load errored for " .. def.Name .. " (part-built fallback): " .. tostring(model))
+					end
+					table.insert(fellBack, def.Name)
+				end
 			end
-			table.insert(fellBack, def.Name)
+			print("[SahurBase] Creator Store character models loaded: " .. table.concat(loaded, ", "))
+			if #fellBack > 0 then
+				print("[SahurBase] Part-built fallback characters: " .. table.concat(fellBack, ", "))
+			end
+		end)
+		if not ok then
+			print("[SahurBase] Character prepare FAILED (whole cast stays part-built): " .. tostring(err))
 		end
-	end
-	print("[SahurBase] Creator Store character models loaded: " .. table.concat(loaded, ", "))
-	if #fellBack > 0 then
-		print("[SahurBase] Part-built fallback characters: " .. table.concat(fellBack, ", "))
-	end
+	end)
 end
 
 local function rarityColorHex(rarity: string): string

@@ -1,11 +1,13 @@
 # SAHUR BASE — Steal a Brainrot
 
 A 3D Steal-a-Brainrot game for Roblox. The world structure, economy and every system are Luau
-code; the characters and the key set dressing are real Creator Store models owned by the place
-owner, loaded at server start with `InsertService:LoadAsset`, sanitized (all scripts, prompts
-and remotes stripped) and normalized by the game code — with part-built lookalikes as automatic
-fallbacks if a model ever fails to load. Entry for make.fun's **roblox-brainrot-01** bounty,
-"Make the best AI Roblox brainrot game".
+code, and the world builds 100% procedurally — a safety baseplate, the plaza, the belt and all
+six bases stand before any asset is touched, and a neutral plaza spawn guarantees a landing
+point. The characters and the key set dressing are real Creator Store models owned by the place
+owner, loaded in the background with `InsertService:LoadAsset`, sanitized (all scripts, prompts
+and remotes stripped) and normalized by the game code — every load is pcall-wrapped, so a model
+that fails or misbehaves degrades to the part-built lookalike and can never break the world.
+Entry for make.fun's **roblox-brainrot-01** bounty, "Make the best AI Roblox brainrot game".
 
 **Play it:** https://www.roblox.com/games/107649210185098
 
@@ -32,10 +34,12 @@ Each one is a Creator Store model from the owner's inventory (asset ids live in
 `CharacterFactory`), scaled to about five studs, re-pivoted so its feet are its pivot, and
 posed by a measured ground offset so it stands exactly on the belt and the pads. The Brainrot
 Pack (asset 137461628889541) is a fallback source, and the part recipes in `BrainrotData` are
-the final fallback. The bases stand on the "Steal A Brainrot Base" platform (107398504693015,
-its display slots are detected at runtime and the pads align to them), the belt is tiled from
-a Conveyor Belt model (7063606146), and the plaza decor comes from a Foliage Pack (7990107300),
-Street Lamps (14212653287), Neon Signs (11666458445) and Wooden Walls (1408960132).
+the final fallback. Set dressing follows the same rule — decoration only, added in the
+background after the game is live: the "Steal A Brainrot Base" platform (107398504693015)
+stands as a display shelf behind each base's pads, a Conveyor Belt model (7063606146) tiles
+over the belt while our own invisible collidable surface guarantees the footing, and the plaza
+decor comes from a Foliage Pack (7990107300), Street Lamps (14212653287), Neon Signs
+(11666458445) and Wooden Walls (1408960132).
 
 ## Layout of the entry
 

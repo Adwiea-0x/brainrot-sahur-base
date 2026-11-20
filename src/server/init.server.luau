@@ -14,13 +14,11 @@ local Economy = require(script.Economy)
 local Conveyor = require(script.Conveyor)
 local StealSystem = require(script.StealSystem)
 
--- The world comes first: every system navigates by its layout table
+-- The world comes first: every system navigates by its layout table. Build() is purely
+-- procedural (no InsertService), so this cannot stall or throw on an asset surprise.
 local world = WorldBuilder.Build()
 GameState.World = world
-
--- Load the real Creator Store character models (sanitized + normalized) before the
--- conveyor starts spawning; anything that fails keeps its part-built recipe.
-CharacterFactory.Prepare()
+print("[SahurBase] init: world built and registered")
 
 BaseManager.Init(world, {
 	OnRebirth = Economy.DoRebirth,
@@ -30,6 +28,7 @@ BaseManager.Init(world, {
 Economy.Init()
 Conveyor.Init(world)
 StealSystem.Init()
+print("[SahurBase] init: systems ready (bases, economy, conveyor, stealing)")
 
 -- HUD buttons route to the same server calls as the physical base pads
 local hudAction = ReplicatedStorage.Remotes.HudAction
@@ -59,6 +58,7 @@ local function onPlayerAdded(player: Player)
 	local data = GameState.NewPlayerData(player)
 	Economy.CreateLeaderstats(player, data)
 	local baseIndex = BaseManager.AssignBase(player)
+	print(string.format("[SahurBase] player joined: %s -> base %s", player.Name, tostring(baseIndex)))
 	if baseIndex then
 		Economy.RefreshShopPrompts(data)
 		GameState.Notify(player, string.format("Welcome to SAHUR BASE! You own BASE %d. Buy brainrots from the belt!", baseIndex))
@@ -104,5 +104,18 @@ Players.PlayerRemoving:Connect(onPlayerRemoving)
 for _, player in ipairs(Players:GetPlayers()) do
 	onPlayerAdded(player)
 end
+print("[SahurBase] init: player handlers wired — game is fully playable now")
+
+-- Everything asset-based happens down here, off the critical path: the game above is
+-- already complete and playable with procedural visuals. DressUp decorates the world in
+-- the background (each step pcall-wrapped), and Prepare streams the real character models
+-- in — the conveyor swaps to them as they land, part-built until then.
+task.spawn(function()
+	local ok, err = pcall(WorldBuilder.DressUp, world)
+	if not ok then
+		print("[SahurBase] DressUp FAILED (procedural world unaffected): " .. tostring(err))
+	end
+end)
+CharacterFactory.Prepare()
 
 print("[SahurBase] SAHUR BASE — Steal a Brainrot is live: 6 bases, conveyor running.")

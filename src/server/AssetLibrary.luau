@@ -141,13 +141,42 @@ end
 -- Re-pivot a model so its pivot sits at the bottom centre of its bounding box: after this,
 -- PivotTo(feetCFrame) puts the model's lowest point exactly on feetCFrame's origin.
 -- Returns the bounding box size measured before re-pivoting.
+--
+-- WARNING (the v12 crash): PivotOffset is a BasePart property — a Model has no such member,
+-- and assigning model.PivotOffset THROWS at runtime. A model's pivot is its PrimaryPart's
+-- pivot, so the re-pivot goes through the PrimaryPart: pick the largest part as PrimaryPart
+-- when the model has none, then set its PivotOffset so the part's world pivot lands exactly
+-- on the bounding box's bottom centre. The whole adjustment is pcall-wrapped: if anything
+-- about a loaded model is unusual, the model keeps its authored pivot and callers degrade
+-- gracefully (CharacterFactory measures ground offsets itself; world dressing re-checks).
 function AssetLibrary.GroundPivot(model: Model): Vector3
 	local cf, size = model:GetBoundingBox()
 	if size.Y <= 0 then
 		return size
 	end
 	local bottomCentre = CFrame.new(cf.Position.X, cf.Position.Y - size.Y / 2, cf.Position.Z)
-	model.PivotOffset = model:GetPivot():ToObjectSpace(bottomCentre)
+	pcall(function()
+		local root = model.PrimaryPart
+		if not root then
+			local best, bestVolume = nil, -1
+			for _, descendant in ipairs(model:GetDescendants()) do
+				if descendant:IsA("BasePart") then
+					local volume = descendant.Size.X * descendant.Size.Y * descendant.Size.Z
+					if volume > bestVolume then
+						bestVolume = volume
+						best = descendant
+					end
+				end
+			end
+			root = best
+			if root then
+				model.PrimaryPart = root
+			end
+		end
+		if root then
+			root.PivotOffset = root.CFrame:ToObjectSpace(bottomCentre)
+		end
+	end)
 	return size
 end
 
