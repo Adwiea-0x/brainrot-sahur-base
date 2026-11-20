@@ -18,6 +18,10 @@ local StealSystem = require(script.StealSystem)
 local world = WorldBuilder.Build()
 GameState.World = world
 
+-- Load the real Creator Store character models (sanitized + normalized) before the
+-- conveyor starts spawning; anything that fails keeps its part-built recipe.
+CharacterFactory.Prepare()
+
 BaseManager.Init(world, {
 	OnRebirth = Economy.DoRebirth,
 	OnUpgradeSlap = Economy.DoUpgradeSlap,

@@ -1,8 +1,11 @@
 # SAHUR BASE — Steal a Brainrot
 
-A 3D Steal-a-Brainrot game for Roblox, built entirely from Luau code (the world, the characters,
-the economy — every Part is placed by a script; there are no external assets). Entry for make.fun's
-**roblox-brainrot-01** bounty, "Make the best AI Roblox brainrot game".
+A 3D Steal-a-Brainrot game for Roblox. The world structure, economy and every system are Luau
+code; the characters and the key set dressing are real Creator Store models owned by the place
+owner, loaded at server start with `InsertService:LoadAsset`, sanitized (all scripts, prompts
+and remotes stripped) and normalized by the game code — with part-built lookalikes as automatic
+fallbacks if a model ever fails to load. Entry for make.fun's **roblox-brainrot-01** bounty,
+"Make the best AI Roblox brainrot game".
 
 **Play it:** https://www.roblox.com/games/107649210185098
 
@@ -21,10 +24,18 @@ the economy — every Part is placed by a script; there are no external assets).
 
 ## The cast
 
-Ten original characters on a five-rarity ladder, all modelled from parts in code:
+Ten characters on a five-rarity ladder:
 Brr Brr Patapim and Lirili Larila (Common), Tralalero Tralala and Chimpanzini Bananini (Rare),
 Ballerina Cappuccina and Cappuccino Assassino (Epic), Tung Tung Sahur and Frigo Camelo
 (Legendary), Bombardiro Crocodilo and La Vaca Saturno Saturnita (Mythic).
+Each one is a Creator Store model from the owner's inventory (asset ids live in
+`CharacterFactory`), scaled to about five studs, re-pivoted so its feet are its pivot, and
+posed by a measured ground offset so it stands exactly on the belt and the pads. The Brainrot
+Pack (asset 137461628889541) is a fallback source, and the part recipes in `BrainrotData` are
+the final fallback. The bases stand on the "Steal A Brainrot Base" platform (107398504693015,
+its display slots are detected at runtime and the pads align to them), the belt is tiled from
+a Conveyor Belt model (7063606146), and the plaza decor comes from a Foliage Pack (7990107300),
+Street Lamps (14212653287), Neon Signs (11666458445) and Wooden Walls (1408960132).
 
 ## Layout of the entry
 
@@ -37,7 +48,8 @@ Ballerina Cappuccina and Cappuccino Assassino (Epic), Tung Tung Sahur and Frigo 
   (every tuning number), as ModuleScripts in ReplicatedStorage.
 - `src/server/` — the `GameServer` bootstrap Script in ServerScriptService and its ModuleScripts:
   `GameState` (all runtime state, in memory only — no DataStore), `WorldBuilder` (the plaza,
-  conveyor and bases), `CharacterFactory` (part-built characters, labels, walk animation),
+  conveyor and bases), `AssetLibrary` (loads, sanitizes and normalizes the owner's Creator
+  Store models), `CharacterFactory` (character models, labels, walk animation),
   `BaseManager` (bases, pads, the lock), `Economy` (cash, income, rebirth, upgrades),
   `Conveyor` (spawning and buying) and `StealSystem` (stealing, carrying, the slap).
 - `src/client/` — `Hud`, a LocalScript that draws the cash/income panel, the Lock and Rebirth

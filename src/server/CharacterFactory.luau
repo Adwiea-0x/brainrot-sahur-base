@@ -1,19 +1,136 @@
 -- CharacterFactory.luau (server)
--- Builds a brainrot character Model out of plain Parts from its BrainrotData recipe, hangs the
--- floating info label (name / rarity / income) over it, and owns the little walk animation every
--- system shares: conveyor strolling, the dash to a buyer's pad and the sad walk home after a drop.
--- Models are anchored ghosts (CanCollide off) moved with PivotTo; players interact via prompts.
+-- Builds a brainrot character Model, hangs the floating info label (name / rarity / income) over
+-- it, and owns the little walk animation every system shares: conveyor strolling, the dash to a
+-- buyer's pad and the sad walk home after a drop.
+--
+-- The look comes from the real thing: at server start, Prepare() loads the owner's Creator Store
+-- character models with InsertService (via AssetLibrary, which strips their scripts), scales
+-- each one to about five studs and re-pivots it so its feet are its pivot. If a model cannot be
+-- loaded, the character falls back to the original part-built recipe in BrainrotData.
+--
+-- GROUNDING: posing never assumes where a model's pivot sits. Every entry measures its own
+-- GroundOffset — the height of the model's pivot above its bounding-box bottom — at build time,
+-- and SetPose/GetFeet work in that measured offset. Feet land exactly on the belt or the pad no
+-- matter how the model was authored. (The old code assumed the pivot was always the invisible
+-- Root part's centre, half a stud above the feet; Model:PivotTo works in PivotOffset space,
+-- which does not promise that, and characters hovered.)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
 local RunService = game:GetService("RunService")
 
 local BrainrotData = require(ReplicatedStorage.Shared.BrainrotData)
+local AssetLibrary = require(script.Parent.AssetLibrary)
 
 local CharacterFactory = {}
 
--- The invisible root part's centre rides this far above the character's feet; every Pos in a
--- recipe is measured from the feet, so the factory subtracts the lift when placing parts.
+-- The invisible Root part (prompt + label anchor) rides this far above the character's feet.
 local ROOT_LIFT = 0.5
+
+-- Owner-owned Creator Store models for the cast, by BrainrotData id.
+local ASSET_IDS = {
+	TungTung = 138151705692565,
+	Tralalero = 111854862176457,
+	Ballerina = 81269930750607,
+	Assassino = 88011361629493,
+	Bombardiro = 111138597903728,
+	Patapim = 121724230281477,
+	Lirili = 77231614368559,
+	Chimpanzini = 83732984780551,
+	FrigoCamelo = 136392638607318,
+	VacaSaturno = 76127116347738,
+}
+-- Fallback source if an individual model fails: a big brainrot pack, searched by name tokens.
+local PACK_ID = 137461628889541
+local PACK_TOKENS = {
+	TungTung = { "tung" },
+	Tralalero = { "tralalero" },
+	Ballerina = { "ballerina", "cappuccina" },
+	Assassino = { "assassino" },
+	Bombardiro = { "bombardiro" },
+	Patapim = { "patapim" },
+	Lirili = { "lirili" },
+	Chimpanzini = { "chimpanzini" },
+	FrigoCamelo = { "frigo", "camelo" },
+	VacaSaturno = { "vaca", "saturno" },
+}
+
+local templates = {} -- [defId] = sanitized, normalized Model waiting in ServerStorage
+local prepared = false
+
+-- Lazily load the fallback pack once and fish a named character model out of it.
+local packContainer = nil
+local function packModelFor(def): Model?
+	if packContainer == nil then
+		packContainer = AssetLibrary.LoadRaw(PACK_ID) or false
+	end
+	if not packContainer then
+		return nil
+	end
+	local tokens = PACK_TOKENS[def.Id] or { string.lower(def.Name) }
+	for _, descendant in ipairs(packContainer:GetDescendants()) do
+		if descendant:IsA("Model") then
+			local lname = string.lower(descendant.Name)
+			for _, token in ipairs(tokens) do
+				if string.find(lname, token, 1, true) then
+					local usable = false
+					for _, inner in ipairs(descendant:GetDescendants()) do
+						if inner:IsA("BasePart") then
+							usable = true
+							break
+						end
+					end
+					if usable then
+						local clone = descendant:Clone()
+						AssetLibrary.Sanitize(clone)
+						return clone
+					end
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- Load every cast member's real model into ServerStorage before the conveyor starts.
+-- Anything that fails to load (or arrives empty) keeps its part-built recipe instead.
+function CharacterFactory.Prepare()
+	if prepared then
+		return
+	end
+	prepared = true
+	local folder = Instance.new("Folder")
+	folder.Name = "BrainrotTemplates"
+	folder.Parent = ServerStorage
+
+	local loaded, fellBack = {}, {}
+	for _, def in ipairs(BrainrotData.Cast) do
+		local model = nil
+		local assetId = ASSET_IDS[def.Id]
+		if assetId then
+			model = AssetLibrary.LoadModel(assetId)
+		end
+		if not model then
+			model = packModelFor(def)
+		end
+		if model and AssetLibrary.NormalizeCharacter(model) then
+			model.Name = def.Id
+			model.Archivable = true
+			model.Parent = folder
+			templates[def.Id] = model
+			table.insert(loaded, def.Name)
+		else
+			if model then
+				model:Destroy()
+			end
+			table.insert(fellBack, def.Name)
+		end
+	end
+	print("[SahurBase] Creator Store character models loaded: " .. table.concat(loaded, ", "))
+	if #fellBack > 0 then
+		print("[SahurBase] Part-built fallback characters: " .. table.concat(fellBack, ", "))
+	end
+end
 
 local function rarityColorHex(rarity: string): string
 	local color = BrainrotData.Rarities[rarity].Color
@@ -48,12 +165,31 @@ local function buildPart(spec, modelCFrame: CFrame): BasePart
 	return part
 end
 
+-- The original look: a character assembled from its BrainrotData part recipe, feet at y=0.
+local function buildPartModel(def): Model
+	local model = Instance.new("Model")
+	model.Name = def.Name
+	local origin = CFrame.new(0, ROOT_LIFT, 0)
+	for _, spec in ipairs(def.Parts) do
+		buildPart(spec, origin).Parent = model
+	end
+	return model
+end
+
 -- Build a fresh brainrot entity (not yet parented anywhere). Call entry.Model.Parent = workspace
 -- (or wherever) once built; pose it with SetPose before anyone sees it.
 function CharacterFactory.Build(def)
-	local model = Instance.new("Model")
-	model.Name = def.Name
+	local model: Model
+	local fromTemplate = templates[def.Id] ~= nil
+	if fromTemplate then
+		model = templates[def.Id]:Clone()
+		model.Name = def.Name
+	else
+		model = buildPartModel(def)
+	end
 
+	-- The invisible Root part anchors the prompt and the label; it rides just above the feet and
+	-- moves rigidly with the model wherever PivotTo takes it.
 	local root = Instance.new("Part")
 	root.Name = "Root"
 	root.Size = Vector3.new(2, 1, 2)
@@ -61,21 +197,28 @@ function CharacterFactory.Build(def)
 	root.Anchored = true
 	root.CanCollide = false
 	root.CanQuery = false
+	root.CanTouch = false
 	root.Parent = model
-
-	local origin = CFrame.new(0, ROOT_LIFT, 0)
-	root.CFrame = origin
-	for _, spec in ipairs(def.Parts) do
-		buildPart(spec, origin).Parent = model
+	if fromTemplate then
+		-- Template pivots are grounded (pivot == feet), so the Root sits ROOT_LIFT above it.
+		root.CFrame = model:GetPivot() * CFrame.new(0, ROOT_LIFT, 0)
+	else
+		root.CFrame = CFrame.new(0, ROOT_LIFT, 0)
 	end
 	model.PrimaryPart = root
+
+	-- Measure, don't assume: how far the model's pivot floats above its lowest point.
+	local pivot = model:GetPivot()
+	local bboxCf, bboxSize = model:GetBoundingBox()
+	local groundOffset = pivot.Position.Y - (bboxCf.Position.Y - bboxSize.Y / 2)
+	local height = bboxSize.Y
 
 	-- The floating label: name, rarity in its colour, income, plus a context line the
 	-- UpdateLabel caller controls (price on the belt, owner's name on a base).
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "Info"
 	gui.Size = UDim2.fromOffset(250, 92)
-	gui.StudsOffset = Vector3.new(0, def.Height + 0.9, 0)
+	gui.StudsOffset = Vector3.new(0, height + 0.9, 0)
 	gui.AlwaysOnTop = true
 	gui.MaxDistance = 160
 	gui.Parent = root
@@ -105,6 +248,8 @@ function CharacterFactory.Build(def)
 		Carrier = nil,
 		MoveToken = 0,
 		BobPhase = math.random() * math.pi * 2,
+		GroundOffset = groundOffset,
+		Height = height,
 	}
 	CharacterFactory.UpdateLabel(entry, "")
 	return entry
@@ -153,16 +298,17 @@ function CharacterFactory.ClearPrompt(entry)
 	end
 end
 
--- Pose the model: feet at feetPos, facing yaw, with a walk-bob height and a side-to-side waddle.
+-- Pose the model: its lowest point rests exactly at feetPos (plus the walk-bob), facing yaw,
+-- with a side-to-side waddle. GroundOffset does the grounding; the bob rides on top of it.
 function CharacterFactory.SetPose(entry, feetPos: Vector3, yaw: number, bobY: number, waddle: number)
-	local cf = CFrame.new(feetPos.X, feetPos.Y + ROOT_LIFT + bobY, feetPos.Z)
+	local cf = CFrame.new(feetPos.X, feetPos.Y + entry.GroundOffset + bobY, feetPos.Z)
 		* CFrame.Angles(0, yaw, waddle)
 	entry.Model:PivotTo(cf)
 end
 
 function CharacterFactory.GetFeet(entry): Vector3
 	local pos = entry.Model:GetPivot().Position
-	return Vector3.new(pos.X, pos.Y - ROOT_LIFT, pos.Z)
+	return Vector3.new(pos.X, pos.Y - entry.GroundOffset, pos.Z)
 end
 
 -- Walk the model in a straight line to targetFeet at speed studs/s, bobbing and facing the way it
